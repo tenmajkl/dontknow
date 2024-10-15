@@ -1,6 +1,6 @@
 use std::io::{stdin, stdout, Read, Write};
 
-use termios::{tcsetattr, Termios, ECHO, ECHOE, ECHOK, ECHONL, ICANON, IEXTEN, ISIG, OPOST, TCSANOW};
+use termios::{tcsetattr, Termios, ECHO, ECHOE, ECHOK, ECHONL, ICANON, IEXTEN, ISIG, TCSANOW};
 
 #[derive(PartialEq)]
 enum Mode {
@@ -29,12 +29,37 @@ struct Editor {
 }
 
 impl Editor {
+
+    fn move_cursor(&mut self, x: isize, y: isize) {
+        let mut cursor_x = self.cursor.x as isize + x;
+        let mut cursor_y = self.cursor.y as isize + y;
+        if cursor_x < 0 {
+            cursor_x = 0;
+        }
+
+        if cursor_y < 0 {
+            cursor_y = 0;
+        }
+
+        if cursor_y as usize >= self.text.len() {
+            cursor_y = self.text.len() as isize - 1; // just trust me bro
+        }
+
+        let line_len = self.text.get(cursor_y as usize).unwrap().len();
+        if cursor_x as usize >= line_len {
+            cursor_x = line_len as isize - 1;
+        }
+
+        self.cursor.x = cursor_x as usize;
+        self.cursor.y = cursor_y as usize;
+    }
+
     fn handle_input(&mut self, buffer: &[u8]) -> State {
         let input = *buffer.get(0).unwrap() as char;
         
         let (state, mode) = match self.mode {
             Mode::Insert => self.handle_insert(input),
-            Mode::Normal => Editor::handle_normal(input),
+            Mode::Normal => self.handle_normal(input),
             Mode::Command => self.handle_command(input),
         };
 
@@ -87,16 +112,32 @@ impl Editor {
 
         self.text.get_mut(self.cursor.y)
             .unwrap()
-            .push(input);
+            .insert(self.cursor.x, input);
 
         self.cursor.x += 1;
         (State::Continue, Mode::Insert)
     }
 
-    fn handle_normal(input: char) -> (State, Mode) {
+    fn handle_normal(&mut self, input: char) -> (State, Mode) {
         match input {
             'i' => (State::Continue, Mode::Insert),
             ':' => (State::Continue, Mode::Command),
+            'j' => {
+                self.move_cursor(0, -1);
+                (State::Continue, Mode::Normal)
+            },
+            'k' => {
+                self.move_cursor(0, 1);
+                (State::Continue, Mode::Normal)
+            },
+            'h' => {
+                self.move_cursor(-1, 0);
+                (State::Continue, Mode::Normal)
+            },
+            'l' => {
+                self.move_cursor(1, 0);
+                (State::Continue, Mode::Normal)
+            }
             _ => (State::Continue, Mode::Normal),
         }
     }
